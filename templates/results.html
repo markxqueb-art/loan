@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xelra - Eligibility Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container results-container">
+        <header>
+            <a href="/" class="back-link">← Check another amount</a>
+            <h1><span style="color: #dc3545; font-weight: 700;">X</span>elra Eligibility Estimate</h1>
+            <p class="subtitle">Based on your income of {{ income | currency }}</p>
+        </header>
+
+        <div class="cards-wrapper">
+            {% for bank in results %}
+            <div class="bank-card" style="border-top: 5px solid {{ bank.color_theme }}">
+                <div class="bank-header">
+                    <div class="bank-logo" style="background-color: {{ bank.color_theme }}">{{ bank.logo_text }}</div>
+                    <h2>{{ bank.bank_name }}</h2>
+                </div>
+                <div class="loan-amount">
+                    <span class="label">Max Loan Amount</span>
+                    <span class="value">{{ bank.amount | currency }}</span>
+                </div>
+
+                <div class="interest-rate-display">
+                    <span class="ir-label">Interest Rate</span>
+                    <span class="ir-value">{{ bank.interest_rate }}</span>
+                </div>
+
+                <div class="details">
+                    <p>{{ bank.details }}</p>
+                </div>
+                <button class="bank-cta">Check Official Site</button>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="disclaimer-box">
+            <h3>⚠️ Disclaimer</h3>
+            <p>This is an indicative eligibility estimate based on general market patterns for demonstration purposes
+                only. Final loan eligibility is subject to actual bank policy, document verification, and credit
+                approval.</p>
+        </div>
+    </div>
+</body>
+
+</html>
