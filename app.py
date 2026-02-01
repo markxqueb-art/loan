@@ -1,20 +1,23 @@
 from flask import Flask, render_template, request, redirect, session
-import requests
-import os
+import random
+import time
 
 app = Flask(__name__)
-app.secret_key = "super_secret_key_for_demo"
+app.secret_key = 'super_secret_key_for_demo'
 
-# Currency formatter
+# In-memory store for OTPs
+otp_store = {}
+
+def generate_otp():
+    return random.randint(1000, 9999)
+
+# Currency filter
 def format_currency(amount):
     return "₹{:,.0f}".format(amount)
 
 app.jinja_env.filters['currency'] = format_currency
 
 
-# ===============================
-# HOME
-# ===============================
 @app.route("/")
 def home():
     if "user" not in session:
@@ -22,114 +25,61 @@ def home():
     return render_template("index.html")
 
 
-# ===============================
-# LOGIN PAGE
-# ===============================
 @app.route("/login")
 def login():
     return render_template("login.html")
 
 
-# ===============================
-# SEND OTP USING OTP.DEV
-# ===============================
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
-    mobile = request.form.get("mobile")
+    mobile = request.form["mobile"]
 
-    if not mobile or not mobile.isdigit() or len(mobile) != 10:
+    if not mobile.isdigit() or len(mobile) != 10:
         return "Invalid mobile number"
 
-    full_phone = "91" + mobile  # India country code
+    otp = generate_otp()
+    expiry = time.time() + 300
 
-    url = "https://api.otp.dev/v1/verifications"
-
-    headers = {
-        "X-OTP-Key": os.environ.get("OTP_API_KEY"),
-        "accept": "application/json",
-        "content-type": "application/json"
+    otp_store[mobile] = {
+        "otp": otp,
+        "expiry": expiry,
+        "attempts": 0
     }
 
-    payload = {
-        "data": {
-            "channel": "sms",
-            "sender": "5e8368ab-b795-4adc-9088-4a5f21b58f99",
-            "phone": full_phone,
-            "template": "326dc91a-e63d-4828-9f25-1244ba3662d4",
-            "code_length": 4
-        }
-    }
+    # Only print to Vercel logs (NO file writing)
+    print(f"\n{'='*30}\nSIMULATED SMS to {mobile}: Your OTP is {otp}\n{'='*30}\n")
 
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        data = response.json()
-
-        print("OTP API Response:", data)
-
-        if response.status_code == 200:
-            session["verification_id"] = data["data"]["id"]
-            session["mobile"] = mobile
-            return render_template("verify.html", mobile=mobile)
-        else:
-            return f"OTP sending failed: {data}"
-
-    except Exception as e:
-        return f"Error sending OTP: {str(e)}"
+    return render_template("verify.html", mobile=mobile)
 
 
-# ===============================
-# VERIFY OTP
-# ===============================
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
-    entered_otp = request.form.get("otp")
-    verification_id = session.get("verification_id")
+    mobile = request.form["mobile"]
+    entered_otp = request.form["otp"]
 
-    if not verification_id:
-        return "Verification session expired"
+    data = otp_store.get(mobile)
 
-    url = f"https://api.otp.dev/v1/verifications/{verification_id}/check"
+    if not data:
+        return "OTP not found"
 
-    headers = {
-        "X-OTP-Key": os.environ.get("OTP_API_KEY"),
-        "accept": "application/json",
-        "content-type": "application/json"
-    }
+    if time.time() > data["expiry"]:
+        del otp_store[mobile]
+        return "OTP expired"
 
-    payload = {
-        "data": {
-            "code": entered_otp
-        }
-    }
-
-    try:
-        response = requests.post(url, json=payload, headers=headers)
-        data = response.json()
-
-        print("Verify API Response:", data)
-
-        if response.status_code == 200 and data["data"]["verified"]:
-            session["user"] = session.get("mobile")
-            return redirect("/")
-        else:
-            return "Invalid OTP"
-
-    except Exception as e:
-        return f"Verification error: {str(e)}"
+    if str(data["otp"]) == entered_otp:
+        session["user"] = mobile
+        del otp_store[mobile]
+        return redirect("/")
+    else:
+        return "Invalid OTP"
 
 
-# ===============================
-# LOGOUT
-# ===============================
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
 
-# ===============================
-# LOAN CALCULATOR
-# ===============================
 @app.route('/calculate', methods=['POST'])
 def calculate():
     if "user" not in session:
@@ -190,6 +140,8 @@ def calculate():
             "bank_name": "HDFC Bank",
             "amount": loan_amount_hdfc,
             "interest_rate": get_interest_rate('HDFC', loan_type, cibil_band),
+            "color_theme": "#004c8f",
+            "logo_text": "HDFC",
             "details": f"Based on 55% FOIR & 20x Multiplier. {hdfc_reason}."
         })
 
@@ -206,6 +158,8 @@ def calculate():
             "bank_name": "Bank of Baroda",
             "amount": loan_amount_bob,
             "interest_rate": get_interest_rate('BoB', loan_type, cibil_band),
+            "color_theme": "#f26522",
+            "logo_text": "BoB",
             "details": f"Based on 45% FOIR & 18x Multiplier. {bob_reason}."
         })
 
@@ -213,3 +167,6 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
+
+# IMPORTANT: Remove app.run() for Vercel
