@@ -87,6 +87,8 @@ def verify_otp():
         json={
             "data": {
                 "channel": "sms",
+                "sender": SENDER_ID,          # REQUIRED
+                "template": TEMPLATE_ID,      # REQUIRED
                 "phone": full_phone,
                 "code": entered_otp
             }
@@ -100,6 +102,7 @@ def verify_otp():
 
     session["user"] = mobile
     return redirect("/")
+
 
 
 
@@ -189,4 +192,5 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
 
