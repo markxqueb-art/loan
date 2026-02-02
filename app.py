@@ -70,13 +70,15 @@ def send_otp():
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
     entered_otp = request.form.get("otp")
-    verification_id = session.get("verification_id")
+    mobile = session.get("mobile")
 
-    if not verification_id:
+    if not mobile:
         return "Session expired. Try again.", 400
 
+    full_phone = "91" + mobile
+
     response = requests.post(
-        f"https://api.otp.dev/v1/verifications/{verification_id}/checks",
+        "https://api.otp.dev/v1/verifications",
         headers={
             "X-OTP-Key": OTP_API_KEY,
             "Content-Type": "application/json",
@@ -84,6 +86,8 @@ def verify_otp():
         },
         json={
             "data": {
+                "channel": "sms",
+                "phone": full_phone,
                 "code": entered_otp
             }
         }
@@ -94,11 +98,9 @@ def verify_otp():
     if not response.ok:
         return f"Verification failed: {result}", 400
 
-    if result["data"]["status"] == "approved":
-        session["user"] = session.get("mobile")
-        return redirect("/")
+    session["user"] = mobile
+    return redirect("/")
 
-    return "Invalid OTP", 400
 
 
 @app.route("/logout")
@@ -187,3 +189,4 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
