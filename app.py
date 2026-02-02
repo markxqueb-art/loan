@@ -32,10 +32,10 @@ def login():
 
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
-    mobile = request.form["mobile"]
+    mobile = request.form.get("mobile")
 
-    if not mobile.isdigit() or len(mobile) != 10:
-        return "Invalid mobile number"
+    if not mobile or not mobile.isdigit() or len(mobile) != 10:
+        return "Invalid mobile number", 400
 
     otp = generate_otp()
     expiry = time.time() + 300
@@ -46,32 +46,32 @@ def send_otp():
         "attempts": 0
     }
 
-    # Only print to Vercel logs (NO file writing)
     print(f"\n{'='*30}\nSIMULATED SMS to {mobile}: Your OTP is {otp}\n{'='*30}\n")
 
-
+    # ✅ IMPORTANT: Always return something
+    return render_template("verify.html", mobile=mobile)
 
 
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
-    mobile = request.form["mobile"]
-    entered_otp = request.form["otp"]
+    mobile = request.form.get("mobile")
+    entered_otp = request.form.get("otp")
 
     data = otp_store.get(mobile)
 
     if not data:
-        return "OTP not found"
+        return "OTP not found", 400
 
     if time.time() > data["expiry"]:
         del otp_store[mobile]
-        return "OTP expired"
+        return "OTP expired", 400
 
     if str(data["otp"]) == entered_otp:
         session["user"] = mobile
         del otp_store[mobile]
         return redirect("/")
     else:
-        return "Invalid OTP"
+        return "Invalid OTP", 400
 
 
 @app.route("/logout")
@@ -99,7 +99,6 @@ def calculate():
         }
 
         cibil_score = cibil_map.get(cibil_band, 700)
-
         results = []
 
         def get_interest_rate(bank, loan_type, cibil_band):
@@ -167,8 +166,3 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
-
-
-# IMPORTANT: Remove app.run() for Vercel
-
-
