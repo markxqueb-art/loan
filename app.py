@@ -1,25 +1,14 @@
 from flask import Flask, render_template, request, redirect, session
 import requests
-import random
-import time
+import os
 
-OTP_API_KEY = "93a9b9bfb40b476b5e8d4c639609a12a"
-SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
-TEMPLATE_ID = "326dc91a-e63d-4828-9f25-1244ba3662d4"
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_demo'
 
-# In-memory store for OTPs
-otp_store = {}
-
-def generate_otp():
-    return random.randint(1000, 9999)
-
-# Currency filter
-def format_currency(amount):
-    return "₹{:,.0f}".format(amount)
-
-app.jinja_env.filters['currency'] = format_currency
+# OTP.dev configuration (USE ENV VARIABLES IN VERCEL)
+OTP_API_KEY = os.environ.get("OTP_API_KEY")
+SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
+TEMPLATE_ID = "326dc91a-e63d-4828-9f25-1244ba3662d4"
 
 
 @app.route("/")
@@ -33,6 +22,8 @@ def home():
 def login():
     return render_template("login.html")
 
+
+# ---------------- SEND OTP ---------------- #
 
 @app.route("/send-otp", methods=["POST"])
 def send_otp():
@@ -63,16 +54,18 @@ def send_otp():
 
     data = response.json()
 
-    if response.status_code != 200:
+    # Accept 200 and 201
+    if not response.ok:
         return f"OTP Send Failed: {data}", 400
 
-    # Save verification ID in session
-    session["verification_id"] = data["data"]["id"]
+    # IMPORTANT: otp.dev returns message_id (not id)
+    session["verification_id"] = data["data"]["message_id"]
     session["mobile"] = mobile
 
     return render_template("verify.html", mobile=mobile)
 
 
+# ---------------- VERIFY OTP ---------------- #
 
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
@@ -98,7 +91,7 @@ def verify_otp():
 
     result = response.json()
 
-    if response.status_code != 200:
+    if not response.ok:
         return f"Verification failed: {result}", 400
 
     if result["data"]["status"] == "approved":
@@ -108,12 +101,13 @@ def verify_otp():
     return "Invalid OTP", 400
 
 
-
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/login")
 
+
+# ---------------- CALCULATOR ---------------- #
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
@@ -165,42 +159,31 @@ def calculate():
         if cibil_score >= 700:
             eligible_emi_hdfc = (income * 0.55) - existing_emis
             loan_amount_hdfc = max(eligible_emi_hdfc, 0) * 20
-            hdfc_reason = "Strong profile match"
         else:
             loan_amount_hdfc = 0
-            hdfc_reason = "Credit score below 700"
 
         results.append({
             "bank_name": "HDFC Bank",
             "amount": loan_amount_hdfc,
             "interest_rate": get_interest_rate('HDFC', loan_type, cibil_band),
             "color_theme": "#004c8f",
-            "logo_text": "HDFC",
-            "details": f"Based on 55% FOIR & 20x Multiplier. {hdfc_reason}."
         })
 
         # BoB
         if cibil_score >= 680:
             eligible_emi_bob = (income * 0.45) - existing_emis
             loan_amount_bob = max(eligible_emi_bob, 0) * 18
-            bob_reason = "Standard eligibility criteria"
         else:
             loan_amount_bob = 0
-            bob_reason = "Credit score below 680"
 
         results.append({
             "bank_name": "Bank of Baroda",
             "amount": loan_amount_bob,
             "interest_rate": get_interest_rate('BoB', loan_type, cibil_band),
             "color_theme": "#f26522",
-            "logo_text": "BoB",
-            "details": f"Based on 45% FOIR & 18x Multiplier. {bob_reason}."
         })
 
         return render_template('results.html', results=results, income=income)
 
     except Exception as e:
         return f"Error: {str(e)}", 400
-
-
-
