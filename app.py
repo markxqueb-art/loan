@@ -5,6 +5,15 @@ import os
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_demo'
 
+# Currency filter
+def format_currency(amount):
+    try:
+        return "₹{:,.0f}".format(float(amount))
+    except:
+        return "₹0"
+
+app.jinja_env.filters['currency'] = format_currency
+
 # OTP.dev configuration (USE ENV VARIABLES IN VERCEL)
 OTP_API_KEY = os.environ.get("OTP_API_KEY")
 SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
@@ -192,5 +201,6 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
 
 
