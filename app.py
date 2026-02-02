@@ -2,6 +2,9 @@ from flask import Flask, render_template, request, redirect, session
 import random
 import time
 
+OTP_API_KEY = "93a9b9bfb40b476b5e8d4c639609a12a"
+SENDER_ID = "5e8368ab-b795-4adc-9088-4a5f21b58f99"
+TEMPLATE_ID = "326dc91a-e63d-4828-9f25-1244ba3662d4"
 app = Flask(__name__)
 app.secret_key = 'super_secret_key_for_demo'
 
@@ -37,41 +40,72 @@ def send_otp():
     if not mobile or not mobile.isdigit() or len(mobile) != 10:
         return "Invalid mobile number", 400
 
-    otp = generate_otp()
-    expiry = time.time() + 300
+    full_phone = "91" + mobile
 
-    otp_store[mobile] = {
-        "otp": otp,
-        "expiry": expiry,
-        "attempts": 0
-    }
+    response = requests.post(
+        "https://api.otp.dev/v1/verifications",
+        headers={
+            "X-OTP-Key": OTP_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        json={
+            "data": {
+                "channel": "sms",
+                "sender": SENDER_ID,
+                "phone": full_phone,
+                "template": TEMPLATE_ID,
+                "code_length": 4
+            }
+        }
+    )
 
-    print(f"\n{'='*30}\nSIMULATED SMS to {mobile}: Your OTP is {otp}\n{'='*30}\n")
+    data = response.json()
 
-    # ✅ IMPORTANT: Always return something
+    if response.status_code != 200:
+        return f"OTP Send Failed: {data}", 400
+
+    # Save verification ID in session
+    session["verification_id"] = data["data"]["id"]
+    session["mobile"] = mobile
+
     return render_template("verify.html", mobile=mobile)
+
 
 
 @app.route("/verify-otp", methods=["POST"])
 def verify_otp():
-    mobile = request.form.get("mobile")
     entered_otp = request.form.get("otp")
+    verification_id = session.get("verification_id")
 
-    data = otp_store.get(mobile)
+    if not verification_id:
+        return "Session expired. Try again.", 400
 
-    if not data:
-        return "OTP not found", 400
+    response = requests.post(
+        f"https://api.otp.dev/v1/verifications/{verification_id}/checks",
+        headers={
+            "X-OTP-Key": OTP_API_KEY,
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        },
+        json={
+            "data": {
+                "code": entered_otp
+            }
+        }
+    )
 
-    if time.time() > data["expiry"]:
-        del otp_store[mobile]
-        return "OTP expired", 400
+    result = response.json()
 
-    if str(data["otp"]) == entered_otp:
-        session["user"] = mobile
-        del otp_store[mobile]
+    if response.status_code != 200:
+        return f"Verification failed: {result}", 400
+
+    if result["data"]["status"] == "approved":
+        session["user"] = session.get("mobile")
         return redirect("/")
-    else:
-        return "Invalid OTP", 400
+
+    return "Invalid OTP", 400
+
 
 
 @app.route("/logout")
@@ -166,3 +200,4 @@ def calculate():
 
     except Exception as e:
         return f"Error: {str(e)}", 400
+
